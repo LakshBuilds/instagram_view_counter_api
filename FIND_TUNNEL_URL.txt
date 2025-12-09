@@ -1,0 +1,53 @@
+========================================
+HOW TO FIND YOUR TUNNEL URL
+========================================
+
+✅ A new tunnel has been started!
+
+📋 STEPS TO GET YOUR URL:
+
+1. Look for a NEW terminal window (PowerShell or CMD) that just opened
+   - It should be running: cloudflared.exe tunnel
+
+2. In that window, scroll up and look for this line:
+   
+   "Your quick Tunnel has been created! Visit it at:"
+   
+3. Below that line, you'll see your URL like:
+   
+   https://[random-words].trycloudflare.com
+   
+4. Copy that entire URL
+
+========================================
+EXAMPLE URL FORMAT:
+========================================
+
+https://signatures-imaging-tours-packard.trycloudflare.com
+https://distances-agent-varies-sheet.trycloudflare.com
+https://expansys-crossword-msie-rapids.trycloudflare.com
+
+========================================
+HOW TO USE YOUR URL:
+========================================
+
+Replace [YOUR-TUNNEL-URL] with the URL you copied:
+
+https://[YOUR-TUNNEL-URL].trycloudflare.com/scrape?url=INSTAGRAM_REEL_URL
+
+EXAMPLE:
+https://signatures-imaging-tours-packard.trycloudflare.com/scrape?url=https://www.instagram.com/reel/DQOtXDQjJwT/
+
+========================================
+IMPORTANT:
+========================================
+
+⚠️ Keep the terminal window OPEN - closing it will stop the tunnel
+⚠️ The URL is temporary and changes each time you restart
+⚠️ Make sure your API server (python api.py) is also running
+
+========================================
+
+
+
+
