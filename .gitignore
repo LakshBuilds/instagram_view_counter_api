@@ -26,8 +26,18 @@ wheels/
 # Scraper output
 *_data.json
 
+# Rate limit test results
+rate_test_*.json
+
+# Request statistics
+request_stats_*.json
+
 # Cookies (contains sensitive authentication data)
 cookies.txt
+cookies_*.txt
+
+# Log files
+*.log
 
 # IDE
 .vscode/

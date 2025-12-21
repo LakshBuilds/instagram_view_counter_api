@@ -1,5 +1,6 @@
 import os
 import time
+import random
 from pathlib import Path
 from typing import Dict, List
 
@@ -8,6 +9,129 @@ AUTO_COOKIE_REFRESH_ENABLED = os.getenv("AUTO_COOKIE_REFRESH", "false").lower() 
     "true",
     "yes",
 )
+
+
+def human_like_mouse_move(driver, element):
+    """Move mouse to element with human-like curve movement using multiple intermediate points"""
+    try:
+        from selenium.webdriver.common.action_chains import ActionChains
+        
+        # Get element location
+        element_location = element.location
+        element_size = element.size
+        target_x = element_location['x'] + element_size['width'] // 2
+        target_y = element_location['y'] + element_size['height'] // 2
+        
+        # Get viewport size
+        viewport_width = driver.execute_script("return window.innerWidth")
+        viewport_height = driver.execute_script("return window.innerHeight")
+        
+        # Start from a random position in viewport
+        current_x = random.randint(50, min(viewport_width - 50, 500))
+        current_y = random.randint(50, min(viewport_height - 50, 400))
+        
+        # Move mouse through multiple intermediate points (Bezier-like curve)
+        actions = ActionChains(driver)
+        
+        # Calculate intermediate points for curved movement
+        num_points = random.randint(3, 6)
+        for i in range(num_points):
+            progress = (i + 1) / num_points
+            
+            # Add some randomness to create curve
+            curve_offset_x = random.randint(-30, 30) * (1 - progress)
+            curve_offset_y = random.randint(-30, 30) * (1 - progress)
+            
+            # Interpolate position
+            next_x = int(current_x + (target_x - current_x) * progress + curve_offset_x)
+            next_y = int(current_y + (target_y - current_y) * progress + curve_offset_y)
+            
+            # Move by offset from current position
+            move_x = next_x - current_x
+            move_y = next_y - current_y
+            
+            # Execute small movement
+            driver.execute_script(f"""
+                var event = new MouseEvent('mousemove', {{
+                    'view': window,
+                    'bubbles': true,
+                    'cancelable': true,
+                    'clientX': {next_x},
+                    'clientY': {next_y}
+                }});
+                document.elementFromPoint({next_x}, {next_y})?.dispatchEvent(event);
+            """)
+            
+            current_x = next_x
+            current_y = next_y
+            
+            # Random pause between movements
+            time.sleep(random.uniform(0.02, 0.08))
+        
+        # Final move to element using ActionChains
+        actions = ActionChains(driver)
+        actions.move_to_element(element)
+        
+        # Small random offset (humans don't click exactly center)
+        offset_x = random.randint(-5, 5)
+        offset_y = random.randint(-5, 5)
+        actions.move_by_offset(offset_x, offset_y)
+        actions.pause(random.uniform(0.1, 0.25))
+        actions.perform()
+        
+        print(f"   🖱️ Mouse moved to element")
+        
+    except Exception as e:
+        print(f"   Mouse movement fallback: {e}")
+        # Fallback: just move to element directly
+        try:
+            from selenium.webdriver.common.action_chains import ActionChains
+            actions = ActionChains(driver)
+            actions.move_to_element(element).perform()
+        except:
+            pass
+
+
+def human_like_typing(element, text, min_delay=0.05, max_delay=0.15):
+    """Type text with human-like random delays between keystrokes"""
+    for char in text:
+        element.send_keys(char)
+        # Random delay between keystrokes
+        delay = random.uniform(min_delay, max_delay)
+        # Occasionally add longer pause (like thinking)
+        if random.random() < 0.1:
+            delay += random.uniform(0.2, 0.5)
+        time.sleep(delay)
+
+
+def random_scroll(driver):
+    """Perform random small scroll to simulate human behavior"""
+    try:
+        scroll_amount = random.randint(-50, 50)
+        driver.execute_script(f"window.scrollBy(0, {scroll_amount})")
+        time.sleep(random.uniform(0.1, 0.3))
+    except:
+        pass
+
+
+def random_mouse_wiggle(driver):
+    """Small random mouse movements to simulate human behavior"""
+    try:
+        from selenium.webdriver.common.action_chains import ActionChains
+        
+        actions = ActionChains(driver)
+        
+        # Small random movements
+        for _ in range(random.randint(2, 5)):
+            x_offset = random.randint(-20, 20)
+            y_offset = random.randint(-20, 20)
+            actions.move_by_offset(x_offset, y_offset)
+            actions.pause(random.uniform(0.05, 0.15))
+        
+        actions.perform()
+        actions.reset_actions()
+    except:
+        pass
 
 COOKIES_FILE = Path(os.getenv("INSTAGRAM_COOKIES_FILE", "cookies.txt"))
 LOGIN_URL = "https://www.instagram.com/accounts/login/"
@@ -132,45 +256,94 @@ def auto_refresh_cookies(reason: str = "") -> bool:
 
         print("   Loading Instagram login page...")
         driver.get(LOGIN_URL)
-        time.sleep(2)  # Let page load
+        time.sleep(random.uniform(2, 4))  # Random wait for page load
         
-        print("   Entering credentials...")
-        wait.until(EC.presence_of_element_located((By.NAME, "username"))).send_keys(
-            username
-        )
-        password_input = wait.until(
-            EC.presence_of_element_located((By.NAME, "password"))
-        )
-        password_input.send_keys(password)
-        password_input.send_keys(Keys.ENTER)
+        # Random mouse movements before interacting
+        print("   Simulating human behavior...")
+        random_mouse_wiggle(driver)
+        time.sleep(random.uniform(0.5, 1.5))
+        random_scroll(driver)
+        
+        print("   Entering credentials with human-like typing...")
+        
+        # Find and interact with username field
+        username_field = wait.until(EC.presence_of_element_located((By.NAME, "username")))
+        human_like_mouse_move(driver, username_field)
+        time.sleep(random.uniform(0.3, 0.7))
+        username_field.click()
+        time.sleep(random.uniform(0.2, 0.5))
+        
+        # Type username with human-like delays
+        human_like_typing(username_field, username)
+        time.sleep(random.uniform(0.5, 1.0))
+        
+        # Random mouse wiggle between fields
+        random_mouse_wiggle(driver)
+        
+        # Find and interact with password field
+        password_input = wait.until(EC.presence_of_element_located((By.NAME, "password")))
+        human_like_mouse_move(driver, password_input)
+        time.sleep(random.uniform(0.3, 0.7))
+        password_input.click()
+        time.sleep(random.uniform(0.2, 0.5))
+        
+        # Type password with human-like delays
+        human_like_typing(password_input, password)
+        time.sleep(random.uniform(0.5, 1.5))
+        
+        # Random pause before clicking login (like human reviewing)
+        random_mouse_wiggle(driver)
+        time.sleep(random.uniform(0.5, 1.0))
+        
+        # Find and click login button instead of pressing Enter
+        try:
+            login_button = driver.find_element(By.XPATH, "//button[@type='submit']")
+            human_like_mouse_move(driver, login_button)
+            time.sleep(random.uniform(0.2, 0.5))
+            login_button.click()
+        except:
+            # Fallback to Enter key
+            password_input.send_keys(Keys.ENTER)
 
         print("   Waiting for login to complete...")
         if show_browser:
             print("   [INFO] Browser is visible - you can manually complete CAPTCHA or security challenges if needed")
         time.sleep(5)  # Initial wait for login processing
         
-        # Handle common Instagram popups/dialogs
+        # Handle common Instagram popups/dialogs with human-like behavior
         try:
+            time.sleep(random.uniform(1, 2))
+            
             # Cookie consent popup
             cookie_buttons = driver.find_elements(By.XPATH, 
                 "//button[contains(text(), 'Allow') or contains(text(), 'Accept') or contains(text(), 'Allow all cookies')]")
             if cookie_buttons:
+                human_like_mouse_move(driver, cookie_buttons[0])
+                time.sleep(random.uniform(0.3, 0.7))
                 cookie_buttons[0].click()
-                time.sleep(2)
+                time.sleep(random.uniform(1.5, 3))
             
             # "Save Your Login Info?" dialog
             not_now_buttons = driver.find_elements(By.XPATH, 
                 "//button[contains(text(), 'Not Now') or contains(text(), 'Not now')]")
             if not_now_buttons:
+                random_mouse_wiggle(driver)
+                time.sleep(random.uniform(0.5, 1.5))
+                human_like_mouse_move(driver, not_now_buttons[0])
+                time.sleep(random.uniform(0.2, 0.5))
                 not_now_buttons[0].click()
-                time.sleep(1)
+                time.sleep(random.uniform(1, 2))
             
             # "Turn on Notifications" dialog
             not_now_buttons = driver.find_elements(By.XPATH, 
                 "//button[contains(text(), 'Not Now') or contains(text(), 'Not now')]")
             if not_now_buttons:
+                random_mouse_wiggle(driver)
+                time.sleep(random.uniform(0.5, 1.0))
+                human_like_mouse_move(driver, not_now_buttons[0])
+                time.sleep(random.uniform(0.2, 0.5))
                 not_now_buttons[0].click()
-                time.sleep(1)
+                time.sleep(random.uniform(1, 2))
         except:
             pass
         

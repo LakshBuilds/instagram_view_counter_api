@@ -10,6 +10,7 @@ from functools import wraps
 from bs4 import BeautifulSoup
 
 from cookie_auto_refresher import auto_refresh_cookies
+from proxy_config import proxy_rotator, PROXY_CONFIG, get_next_proxy
 
 # Fix Windows console encoding
 if sys.platform == 'win32':
@@ -119,7 +120,9 @@ def get_session_cookies(custom_cookies=None):
     
     # Try to load cookies from file first
     if custom_cookies is None:
-        custom_cookies = load_cookies_from_file()
+        # Check for account-specific cookie file from environment
+        cookies_file = os.getenv('INSTAGRAM_COOKIES_FILE', 'cookies.txt')
+        custom_cookies = load_cookies_from_file(cookies_file)
     
     # If custom cookies provided, use them
     if custom_cookies:
@@ -133,9 +136,12 @@ def get_session_cookies(custom_cookies=None):
         return session, csrf_token
     
     try:
-        # Visit Instagram homepage to get cookies
-        response = session.get('https://www.instagram.com/', timeout=10)
+        # Visit Instagram homepage to get cookies (with proxy if enabled)
+        proxy = get_next_proxy()
+        response = session.get('https://www.instagram.com/', timeout=10, proxies=proxy)
         csrf_token = session.cookies.get('csrftoken', '')
+        if proxy and PROXY_CONFIG["enabled"]:
+            print(f"✓ Session created with proxy")
         return session, csrf_token
     except Exception as e:
         print(f"Warning: Could not get session cookies: {e}")
@@ -216,7 +222,10 @@ def get_view_count_from_api(session, media_id, csrf_token, allow_refresh=True):
         if cookie_string:
             headers['cookie'] = cookie_string
         
-        response = session.get(api_url, headers=headers, timeout=10)
+        # Get proxy for this request
+        proxy = get_next_proxy()
+        
+        response = session.get(api_url, headers=headers, timeout=10, proxies=proxy)
         
         if response.status_code == 200:
             data = response.json()
@@ -326,12 +335,16 @@ def scrape_instagram_reel(url, session=None, save_json=True):
                 # Create payload with different doc_id
                 payload = create_payload(shortcode, doc_id=doc_id)
                 
+                # Get proxy for this request (rotates per request if enabled)
+                proxy = get_next_proxy()
+                
                 # Make request using session
                 response = session.post(
                     "https://www.instagram.com/graphql/query",
                     headers=get_headers(csrf_token),
                     data=payload,
-                    timeout=10
+                    timeout=10,
+                    proxies=proxy
                 )
                 
                 # Check for authentication errors and try auto-refresh once

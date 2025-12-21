@@ -1,0 +1,54 @@
+name: Instagram Scraper
+
+on:
+  # Run every 4 hours
+  schedule:
+    - cron: '0 */4 * * *'
+  
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      cycles:
+        description: 'Number of cycles to run'
+        required: false
+        default: '1'
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install requests beautifulsoup4
+      
+      - name: Restore cookies from secrets
+        run: |
+          echo "${{ secrets.COOKIES_BHDEMO2025 }}" > cookies_bhdemo2025.txt
+          echo "${{ secrets.COOKIES_ELMASEDOYLE }}" > cookies_elmasedoyle.txt
+          echo "${{ secrets.COOKIES_CANDY_SHOPBUY }}" > cookies_candy_shopbuy.txt
+      
+      - name: Run scraper
+        run: python cloud_scraper.py
+        env:
+          AUTO_COOKIE_REFRESH: "0"
+          SCRAPER_CYCLES: "1"
+      
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scrape-results-${{ github.run_number }}
+          path: |
+            *.json
+            *.log
+          retention-days: 7
