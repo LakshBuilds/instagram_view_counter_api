@@ -9,7 +9,7 @@ from pathlib import Path
 def login_account(username, password):
     """Login a single account and get cookies"""
     print(f"\n{'='*60}")
-    print(f"🔐 LOGGING IN: {username}")
+    print(f"LOGGING IN: {username}")
     print(f"{'='*60}")
     
     # Set environment variables
@@ -23,16 +23,16 @@ def login_account(username, password):
     cookie_auto_refresher.COOKIES_FILE = Path(f'cookies_{username}.txt')
     
     print(f"   Opening browser for {username}...")
-    print(f"   ⚠️ Complete any CAPTCHA manually if needed")
+    print(f"   WARNING: Complete any CAPTCHA manually if needed")
     
     from cookie_auto_refresher import auto_refresh_cookies
     success = auto_refresh_cookies(reason=f"Login for {username}")
     
     if success:
-        print(f"\n✅ {username} - LOGIN SUCCESSFUL!")
-        print(f"📁 Cookies saved to: cookies_{username}.txt")
+        print(f"\nSUCCESS: {username} - LOGIN SUCCESSFUL!")
+        print(f"Cookies saved to: cookies_{username}.txt")
     else:
-        print(f"\n❌ {username} - LOGIN FAILED!")
+        print(f"\nFAILED: {username} - LOGIN FAILED!")
     
     return success
 

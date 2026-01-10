@@ -10,7 +10,7 @@ from functools import wraps
 from bs4 import BeautifulSoup
 
 from cookie_auto_refresher import auto_refresh_cookies
-from proxy_config import proxy_rotator, PROXY_CONFIG, get_next_proxy
+from proxy_config import proxy_rotator, PROXY_CONFIG, get_next_proxy, get_proxy_for_account
 
 # Fix Windows console encoding
 if sys.platform == 'win32':
@@ -273,6 +273,48 @@ def get_view_count_from_api(session, media_id, csrf_token, allow_refresh=True):
     return None
 
 
+def try_html_parsing(session, url, shortcode):
+    """
+    Try to extract data from Instagram HTML page as fallback.
+    Returns GraphQL-like data structure if successful, None otherwise.
+    """
+    try:
+        response = session.get(url, timeout=15)
+        if response.status_code != 200:
+            print(f"  ✗ HTML parsing failed: status {response.status_code}")
+            return None
+        
+        html = response.text
+        
+        # Try to find JSON data in script tags
+        import re
+        
+        # Look for shared data in script
+        patterns = [
+            r'window\._sharedData\s*=\s*({.+?});</script>',
+            r'window\.__additionalDataLoaded\s*\([^,]+,\s*({.+?})\);',
+            r'"PostPage":\s*\[({.+?})\]',
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, html, re.DOTALL)
+            if match:
+                try:
+                    data = json.loads(match.group(1))
+                    print(f"  ✓ Found data via HTML parsing")
+                    # Convert to expected format
+                    return {"data": data}
+                except json.JSONDecodeError:
+                    continue
+        
+        print(f"  ✗ No data found in HTML")
+        return None
+        
+    except Exception as e:
+        print(f"  ✗ HTML parsing error: {e}")
+        return None
+
+
 def get_headers(csrf_token=''):
     """Get headers that mimic a browser request"""
     headers = {
@@ -292,7 +334,7 @@ def get_headers(csrf_token=''):
 
 
 @retry(max_attempts=3, delay=2)
-def scrape_instagram_reel(url, session=None, save_json=True):
+def scrape_instagram_reel(url, session=None, save_json=True, cookie_file=None, account=None):
     """
     Scrape Instagram Reel data using GraphQL API
     
@@ -300,6 +342,8 @@ def scrape_instagram_reel(url, session=None, save_json=True):
         url (str): Instagram Reel URL
         session (requests.Session): Optional session object with cookies
         save_json (bool): Whether to save raw JSON data to file (default: True)
+        cookie_file (str): Optional path to cookie file (default: None, uses cookies.txt)
+        account (str): Optional account name for per-account proxy selection
         
     Returns:
         dict: Dictionary with success status and data or error message
@@ -310,13 +354,20 @@ def scrape_instagram_reel(url, session=None, save_json=True):
         
         # Get session and CSRF token if not provided
         if session is None:
-            session, csrf_token = get_session_cookies()
+            # Load cookies from specified file or default
+            custom_cookies = None
+            if cookie_file:
+                custom_cookies = load_cookies_from_file(cookie_file)
+            session, csrf_token = get_session_cookies(custom_cookies)
         else:
             csrf_token = session.cookies.get('csrftoken', '')
         
         # Extract shortcode from URL
         shortcode = extract_shortcode_from_url(url)
         print(f"Extracted shortcode: {shortcode}")
+        
+        # Get proxy for this account (if per-account proxies enabled)
+        account_proxy = get_proxy_for_account(account) if account else get_next_proxy()
         
         # Try multiple GraphQL queries to get view counts
         # Different doc_ids might return different data
@@ -335,8 +386,8 @@ def scrape_instagram_reel(url, session=None, save_json=True):
                 # Create payload with different doc_id
                 payload = create_payload(shortcode, doc_id=doc_id)
                 
-                # Get proxy for this request (rotates per request if enabled)
-                proxy = get_next_proxy()
+                # Use account-specific proxy if available, otherwise use rotating proxy
+                proxy = account_proxy
                 
                 # Make request using session
                 response = session.post(

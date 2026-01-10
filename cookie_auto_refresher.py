@@ -1,163 +1,41 @@
+"""
+Instagram Cookie Auto Refresher - Updated for 2025/2026
+Uses Selenium with realistic browser profile to avoid Instagram detection
+"""
+
 import os
 import time
 import random
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 AUTO_COOKIE_REFRESH_ENABLED = os.getenv("AUTO_COOKIE_REFRESH", "false").lower() in (
-    "1",
-    "true",
-    "yes",
+    "1", "true", "yes",
 )
-
-
-def human_like_mouse_move(driver, element):
-    """Move mouse to element with human-like curve movement using multiple intermediate points"""
-    try:
-        from selenium.webdriver.common.action_chains import ActionChains
-        
-        # Get element location
-        element_location = element.location
-        element_size = element.size
-        target_x = element_location['x'] + element_size['width'] // 2
-        target_y = element_location['y'] + element_size['height'] // 2
-        
-        # Get viewport size
-        viewport_width = driver.execute_script("return window.innerWidth")
-        viewport_height = driver.execute_script("return window.innerHeight")
-        
-        # Start from a random position in viewport
-        current_x = random.randint(50, min(viewport_width - 50, 500))
-        current_y = random.randint(50, min(viewport_height - 50, 400))
-        
-        # Move mouse through multiple intermediate points (Bezier-like curve)
-        actions = ActionChains(driver)
-        
-        # Calculate intermediate points for curved movement
-        num_points = random.randint(3, 6)
-        for i in range(num_points):
-            progress = (i + 1) / num_points
-            
-            # Add some randomness to create curve
-            curve_offset_x = random.randint(-30, 30) * (1 - progress)
-            curve_offset_y = random.randint(-30, 30) * (1 - progress)
-            
-            # Interpolate position
-            next_x = int(current_x + (target_x - current_x) * progress + curve_offset_x)
-            next_y = int(current_y + (target_y - current_y) * progress + curve_offset_y)
-            
-            # Move by offset from current position
-            move_x = next_x - current_x
-            move_y = next_y - current_y
-            
-            # Execute small movement
-            driver.execute_script(f"""
-                var event = new MouseEvent('mousemove', {{
-                    'view': window,
-                    'bubbles': true,
-                    'cancelable': true,
-                    'clientX': {next_x},
-                    'clientY': {next_y}
-                }});
-                document.elementFromPoint({next_x}, {next_y})?.dispatchEvent(event);
-            """)
-            
-            current_x = next_x
-            current_y = next_y
-            
-            # Random pause between movements
-            time.sleep(random.uniform(0.02, 0.08))
-        
-        # Final move to element using ActionChains
-        actions = ActionChains(driver)
-        actions.move_to_element(element)
-        
-        # Small random offset (humans don't click exactly center)
-        offset_x = random.randint(-5, 5)
-        offset_y = random.randint(-5, 5)
-        actions.move_by_offset(offset_x, offset_y)
-        actions.pause(random.uniform(0.1, 0.25))
-        actions.perform()
-        
-        print(f"   🖱️ Mouse moved to element")
-        
-    except Exception as e:
-        print(f"   Mouse movement fallback: {e}")
-        # Fallback: just move to element directly
-        try:
-            from selenium.webdriver.common.action_chains import ActionChains
-            actions = ActionChains(driver)
-            actions.move_to_element(element).perform()
-        except:
-            pass
-
-
-def human_like_typing(element, text, min_delay=0.05, max_delay=0.15):
-    """Type text with human-like random delays between keystrokes"""
-    for char in text:
-        element.send_keys(char)
-        # Random delay between keystrokes
-        delay = random.uniform(min_delay, max_delay)
-        # Occasionally add longer pause (like thinking)
-        if random.random() < 0.1:
-            delay += random.uniform(0.2, 0.5)
-        time.sleep(delay)
-
-
-def random_scroll(driver):
-    """Perform random small scroll to simulate human behavior"""
-    try:
-        scroll_amount = random.randint(-50, 50)
-        driver.execute_script(f"window.scrollBy(0, {scroll_amount})")
-        time.sleep(random.uniform(0.1, 0.3))
-    except:
-        pass
-
-
-def random_mouse_wiggle(driver):
-    """Small random mouse movements to simulate human behavior"""
-    try:
-        from selenium.webdriver.common.action_chains import ActionChains
-        
-        actions = ActionChains(driver)
-        
-        # Small random movements
-        for _ in range(random.randint(2, 5)):
-            x_offset = random.randint(-20, 20)
-            y_offset = random.randint(-20, 20)
-            actions.move_by_offset(x_offset, y_offset)
-            actions.pause(random.uniform(0.05, 0.15))
-        
-        actions.perform()
-        actions.reset_actions()
-    except:
-        pass
-
-COOKIES_FILE = Path(os.getenv("INSTAGRAM_COOKIES_FILE", "cookies.txt"))
-LOGIN_URL = "https://www.instagram.com/accounts/login/"
 
 REQUIRED_COOKIES: List[str] = [
     "csrftoken",
-    "sessionid",
+    "sessionid", 
     "ds_user_id",
-    "datr",
+    "mid",
     "ig_did",
     "ig_nrcb",
-    "ps_l",
-    "ps_n",
-    "wd",
     "rur",
-    "dpr",
+    "datr",
 ]
 
 
-def _write_cookie_file(cookies: Dict[str, str]) -> None:
-    """Persist cookies to cookies.txt in the existing simple KEY=VALUE format."""
-    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-    ordered_names = REQUIRED_COOKIES + [
-        name for name in cookies.keys() if name not in REQUIRED_COOKIES
-    ]
+def get_cookie_file_path(username: Optional[str] = None) -> Path:
+    """Get the cookie file path for a specific account or default"""
+    if username:
+        return Path(f"cookies_{username}.txt")
+    return Path(os.getenv("INSTAGRAM_COOKIES_FILE", "cookies.txt"))
 
+
+def _write_cookie_file(cookies: Dict[str, str], cookie_file: Path) -> None:
+    """Persist cookies to file in KEY=VALUE format."""
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    
     lines = [
         "# Instagram Cookies",
         f"# Automatically refreshed at {timestamp}",
@@ -166,284 +44,462 @@ def _write_cookie_file(cookies: Dict[str, str]) -> None:
     ]
 
     seen = set()
-    for name in ordered_names:
+    for name in REQUIRED_COOKIES:
         if name in cookies and name not in seen:
-            value = cookies[name]
+            lines.append(f"{name}={cookies[name]}")
+            seen.add(name)
+    
+    for name, value in cookies.items():
+        if name not in seen:
             lines.append(f"{name}={value}")
             seen.add(name)
 
-    COOKIES_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    cookie_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"   ✅ Cookies saved to {cookie_file}")
 
 
-def auto_refresh_cookies(reason: str = "") -> bool:
+def human_delay(min_sec: float = 0.5, max_sec: float = 2.0):
+    """Random human-like delay"""
+    time.sleep(random.uniform(min_sec, max_sec))
+
+
+def human_typing(element, text: str, min_delay: float = 0.08, max_delay: float = 0.18):
+    """Type text with human-like delays"""
+    for char in text:
+        element.send_keys(char)
+        delay = random.uniform(min_delay, max_delay)
+        if random.random() < 0.1:
+            delay += random.uniform(0.3, 0.6)
+        time.sleep(delay)
+
+
+def _create_realistic_chrome_driver():
     """
-    Attempt to refresh cookies by logging into Instagram with Selenium.
-
-    Returns:
-        bool: True if cookies were refreshed successfully.
+    Create Chrome driver with realistic browser profile.
     """
-    if not AUTO_COOKIE_REFRESH_ENABLED:
-        print(
-            "Auto cookie refresh disabled. Set AUTO_COOKIE_REFRESH=1 to enable automatic login."
-        )
-        return False
-
-    username = (
-        os.getenv("INSTAGRAM_USERNAME")
-        or os.getenv("INSTA_USERNAME")
-        or os.getenv("INSTAGRAM_USER")
-    )
-    password = (
-        os.getenv("INSTAGRAM_PASSWORD")
-        or os.getenv("INSTA_PASSWORD")
-        or os.getenv("INSTAGRAM_PASS")
-    )
-
-    if not username or not password:
-        print(
-            "Automatic cookie refresh requires INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD environment variables."
-        )
-        return False
-
-    try:
-        from selenium import webdriver
-        from selenium.webdriver.chrome.options import Options
-        from selenium.webdriver.chrome.service import Service
-        from selenium.webdriver.common.by import By
-        from selenium.webdriver.common.keys import Keys
-        from selenium.webdriver.support import expected_conditions as EC
-        from selenium.webdriver.support.ui import WebDriverWait
-        from webdriver_manager.chrome import ChromeDriverManager
-    except ImportError:
-        print(
-            "Selenium is not installed. Please run 'pip install selenium webdriver-manager' to enable auto refresh."
-        )
-        return False
-
-    print("View count fetch failed. Attempting automatic Instagram login...")
-    if reason:
-        print(f"   Reason: {reason}")
-
-    # Check if we should show the browser (visible mode)
-    show_browser = os.getenv("SHOW_BROWSER", "true").lower() in ("1", "true", "yes")
-    if show_browser:
-        print("   Opening browser window (visible mode)...")
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.chrome.service import Service
     
     options = Options()
-    if not show_browser:
-        options.add_argument("--headless=new")
+    
+    # Window size like real user
+    options.add_argument("--window-size=1366,768")
+    options.add_argument("--start-maximized")
+    
+    # Disable automation flags
     options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
+    options.add_experimental_option('useAutomationExtension', False)
+    
+    # Real Chrome user agent (Chrome 131 - latest stable)
+    options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+    
+    # Performance and stability
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--no-sandbox")
-    if not show_browser:
-        options.add_argument("--disable-gpu")
+    options.add_argument("--disable-gpu")
     options.add_argument("--disable-extensions")
-    options.add_argument("--window-size=1280,720")
-    options.add_argument("--disable-web-security")
-    options.add_argument("--disable-features=IsolateOrigins,site-per-process")
-    options.add_experimental_option("excludeSwitches", ["enable-logging", "enable-automation"])
-    options.add_experimental_option('useAutomationExtension', False)
-    options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+    options.add_argument("--disable-infobars")
+    options.add_argument("--disable-notifications")
+    options.add_argument("--disable-popup-blocking")
+    
+    # Language settings
+    options.add_argument("--lang=en-US")
+    options.add_experimental_option('prefs', {
+        'intl.accept_languages': 'en-US,en',
+        'credentials_enable_service': False,
+        'profile.password_manager_enabled': False
+    })
+    
+    # Check headless mode
+    show_browser = os.getenv("SHOW_BROWSER", "true").lower() in ("1", "true", "yes")
+    if not show_browser:
+        options.add_argument("--headless=new")
+    
+    try:
+        from webdriver_manager.chrome import ChromeDriverManager
+        service = Service(ChromeDriverManager().install())
+    except:
+        service = None
+    
+    if service:
+        driver = webdriver.Chrome(service=service, options=options)
+    else:
+        driver = webdriver.Chrome(options=options)
+    
+    # Execute stealth scripts to hide automation
+    driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+        "source": """
+            // Remove webdriver property
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+            
+            // Add plugins (real browsers have plugins)
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [
+                    {name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer'},
+                    {name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai'},
+                    {name: 'Native Client', filename: 'internal-nacl-plugin'}
+                ]
+            });
+            
+            // Set languages
+            Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+            
+            // Add chrome runtime
+            window.chrome = {runtime: {}, loadTimes: function(){}, csi: function(){}};
+            
+            // Fix permissions
+            const originalQuery = window.navigator.permissions.query;
+            window.navigator.permissions.query = (parameters) => (
+                parameters.name === 'notifications' ?
+                    Promise.resolve({ state: Notification.permission }) :
+                    originalQuery(parameters)
+            );
+            
+            // Add realistic screen properties
+            Object.defineProperty(screen, 'availWidth', {get: () => 1366});
+            Object.defineProperty(screen, 'availHeight', {get: () => 728});
+            Object.defineProperty(screen, 'width', {get: () => 1366});
+            Object.defineProperty(screen, 'height', {get: () => 768});
+            Object.defineProperty(screen, 'colorDepth', {get: () => 24});
+            Object.defineProperty(screen, 'pixelDepth', {get: () => 24});
+        """
+    })
+    
+    driver.set_page_load_timeout(60)
+    print("   ✅ Created realistic Chrome browser profile")
+    return driver
 
+
+def auto_refresh_cookies(
+    username: Optional[str] = None,
+    password: Optional[str] = None,
+    reason: str = ""
+) -> bool:
+    """
+    Refresh Instagram cookies using Selenium with realistic browser profile.
+    """
+    
+    username = username or os.getenv("INSTAGRAM_USERNAME") or os.getenv("INSTA_USERNAME")
+    password = password or os.getenv("INSTAGRAM_PASSWORD") or os.getenv("INSTA_PASSWORD")
+    
+    if not username or not password:
+        print("❌ Missing credentials. Set INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD env vars.")
+        return False
+    
+    cookie_file = get_cookie_file_path(username)
+    
+    print(f"\n🔄 Starting cookie refresh for: {username}")
+    if reason:
+        print(f"   Reason: {reason}")
+    
     driver = None
     try:
-        service = Service(ChromeDriverManager().install())
-        if not show_browser:
-            service.creation_flags = 0x08000000  # CREATE_NO_WINDOW on Windows (only in headless)
-        driver = webdriver.Chrome(service=service, options=options)
-        driver.set_page_load_timeout(60)
-        wait = WebDriverWait(driver, 60)
-
-        print("   Loading Instagram login page...")
-        driver.get(LOGIN_URL)
-        time.sleep(random.uniform(2, 4))  # Random wait for page load
-        
-        # Random mouse movements before interacting
-        print("   Simulating human behavior...")
-        random_mouse_wiggle(driver)
-        time.sleep(random.uniform(0.5, 1.5))
-        random_scroll(driver)
-        
-        print("   Entering credentials with human-like typing...")
-        
-        # Find and interact with username field
-        username_field = wait.until(EC.presence_of_element_located((By.NAME, "username")))
-        human_like_mouse_move(driver, username_field)
-        time.sleep(random.uniform(0.3, 0.7))
-        username_field.click()
-        time.sleep(random.uniform(0.2, 0.5))
-        
-        # Type username with human-like delays
-        human_like_typing(username_field, username)
-        time.sleep(random.uniform(0.5, 1.0))
-        
-        # Random mouse wiggle between fields
-        random_mouse_wiggle(driver)
-        
-        # Find and interact with password field
-        password_input = wait.until(EC.presence_of_element_located((By.NAME, "password")))
-        human_like_mouse_move(driver, password_input)
-        time.sleep(random.uniform(0.3, 0.7))
-        password_input.click()
-        time.sleep(random.uniform(0.2, 0.5))
-        
-        # Type password with human-like delays
-        human_like_typing(password_input, password)
-        time.sleep(random.uniform(0.5, 1.5))
-        
-        # Random pause before clicking login (like human reviewing)
-        random_mouse_wiggle(driver)
-        time.sleep(random.uniform(0.5, 1.0))
-        
-        # Find and click login button instead of pressing Enter
-        try:
-            login_button = driver.find_element(By.XPATH, "//button[@type='submit']")
-            human_like_mouse_move(driver, login_button)
-            time.sleep(random.uniform(0.2, 0.5))
-            login_button.click()
-        except:
-            # Fallback to Enter key
-            password_input.send_keys(Keys.ENTER)
-
-        print("   Waiting for login to complete...")
-        if show_browser:
-            print("   [INFO] Browser is visible - you can manually complete CAPTCHA or security challenges if needed")
-        time.sleep(5)  # Initial wait for login processing
-        
-        # Handle common Instagram popups/dialogs with human-like behavior
-        try:
-            time.sleep(random.uniform(1, 2))
-            
-            # Cookie consent popup
-            cookie_buttons = driver.find_elements(By.XPATH, 
-                "//button[contains(text(), 'Allow') or contains(text(), 'Accept') or contains(text(), 'Allow all cookies')]")
-            if cookie_buttons:
-                human_like_mouse_move(driver, cookie_buttons[0])
-                time.sleep(random.uniform(0.3, 0.7))
-                cookie_buttons[0].click()
-                time.sleep(random.uniform(1.5, 3))
-            
-            # "Save Your Login Info?" dialog
-            not_now_buttons = driver.find_elements(By.XPATH, 
-                "//button[contains(text(), 'Not Now') or contains(text(), 'Not now')]")
-            if not_now_buttons:
-                random_mouse_wiggle(driver)
-                time.sleep(random.uniform(0.5, 1.5))
-                human_like_mouse_move(driver, not_now_buttons[0])
-                time.sleep(random.uniform(0.2, 0.5))
-                not_now_buttons[0].click()
-                time.sleep(random.uniform(1, 2))
-            
-            # "Turn on Notifications" dialog
-            not_now_buttons = driver.find_elements(By.XPATH, 
-                "//button[contains(text(), 'Not Now') or contains(text(), 'Not now')]")
-            if not_now_buttons:
-                random_mouse_wiggle(driver)
-                time.sleep(random.uniform(0.5, 1.0))
-                human_like_mouse_move(driver, not_now_buttons[0])
-                time.sleep(random.uniform(0.2, 0.5))
-                not_now_buttons[0].click()
-                time.sleep(random.uniform(1, 2))
-        except:
-            pass
-        
-        # Wait for redirect away from login page or for cookies to appear
-        # Longer wait if browser is visible (user might need to complete challenges)
-        max_wait = 120 if show_browser else 30
-        start_time = time.time()
-        check_interval = 3 if show_browser else 1  # Check less frequently if visible (user might be interacting)
-        
-        while time.time() - start_time < max_wait:
-            try:
-                if not driver:
-                    raise Exception("Browser driver disconnected")
-                current_url = driver.current_url
-                cookies = driver.get_cookies()
-                cookie_names = {c.get("name") for c in cookies}
-                
-                # Success: we have session cookies
-                if "sessionid" in cookie_names and "csrftoken" in cookie_names:
-                    print("   [SUCCESS] Session cookies detected!")
-                    break
-                
-                # Success: we're no longer on login page
-                if "login" not in current_url.lower() and "accounts" not in current_url.lower():
-                    print(f"   [SUCCESS] Redirected to: {current_url}")
-                    # Give it a moment to set cookies
-                    time.sleep(3)
-                    cookies = driver.get_cookies()
-                    cookie_names = {c.get("name") for c in cookies}
-                    if "sessionid" in cookie_names and "csrftoken" in cookie_names:
-                        print("   [SUCCESS] Session cookies found after redirect!")
-                        break
-                
-                # Check for error messages or security challenges
-                try:
-                    # Check for various error indicators
-                    error_selectors = [
-                        "[role='alert']",
-                        ".error",
-                        "#slfErrorAlert",
-                        "p[role='alert']",
-                        "[data-testid='login-error-message']",
-                        "div[role='alert']"
-                    ]
-                    for selector in error_selectors:
-                        error_elements = driver.find_elements(By.CSS_SELECTOR, selector)
-                        if error_elements:
-                            error_text = error_elements[0].text.strip()
-                            if error_text and len(error_text) > 3:
-                                print(f"   Login error detected: {error_text[:200]}")
-                                raise Exception(f"Login failed: {error_text[:200]}")
-                    
-                    # Check for security challenge indicators
-                    challenge_indicators = driver.find_elements(By.CSS_SELECTOR, 
-                        "h2, [class*='challenge'], [class*='verify'], [class*='security']")
-                    if challenge_indicators:
-                        challenge_text = " ".join([e.text for e in challenge_indicators[:3] if e.text])
-                        if challenge_text:
-                            print(f"   Security challenge detected: {challenge_text[:200]}")
-                except Exception as e:
-                    if "Login failed" in str(e):
-                        raise
-                    pass
-                
-                elapsed = int(time.time() - start_time)
-                if show_browser and elapsed % 10 == 0:  # Print status every 10 seconds
-                    print(f"   Waiting... ({elapsed}/{max_wait}s) - Check browser window for any challenges")
-                time.sleep(check_interval)
-            except Exception as e:
-                if "session" in str(e).lower() or "disconnected" in str(e).lower():
-                    raise
-                time.sleep(check_interval)
-        
-        # Final check
-        cookies = driver.get_cookies()
-        cookie_names = {c.get("name") for c in cookies}
-        if "sessionid" not in cookie_names or "csrftoken" not in cookie_names:
-            current_url = driver.current_url
-            try:
-                page_title = driver.title
-                print(f"   Page title: {page_title}")
-                # Check for any visible text that might indicate the issue
-                body_text = driver.find_element(By.TAG_NAME, "body").text[:300]
-                if "challenge" in body_text.lower() or "verify" in body_text.lower():
-                    print(f"   Page content suggests security challenge")
-            except:
-                pass
-            raise Exception(f"Failed to get session cookies. Current URL: {current_url}")
-        print("   Login successful, extracting cookies...")
-        time.sleep(3)  # allow additional cookies to populate
-
-        cookies_dict = {cookie["name"]: cookie["value"] for cookie in driver.get_cookies()}
-        _write_cookie_file(cookies_dict)
-        print(f"Cookies refreshed automatically and saved to {COOKIES_FILE}")
-        return True
-    except Exception as exc:
-        print(f"Automatic cookie refresh failed: {exc}")
+        driver = _create_realistic_chrome_driver()
+    except Exception as e:
+        print(f"   ❌ Failed to create browser: {e}")
+        return False
+    
+    try:
+        success = _perform_login(driver, username, password)
+        if success:
+            cookies = {c["name"]: c["value"] for c in driver.get_cookies()}
+            _write_cookie_file(cookies, cookie_file)
+            print(f"✅ Cookies refreshed successfully for {username}!")
+            return True
+        else:
+            print(f"❌ Login failed for {username}")
+            return False
+    except Exception as e:
+        print(f"❌ Error during login: {e}")
         return False
     finally:
         if driver:
-            driver.quit()
+            try:
+                driver.quit()
+            except:
+                pass
 
-                                                                                                                                      
+
+def _perform_login(driver, username: str, password: str) -> bool:
+    """Perform the actual Instagram login with human-like behavior"""
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.common.keys import Keys
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.common.action_chains import ActionChains
+    
+    LOGIN_URL = "https://www.instagram.com/accounts/login/"
+    
+    print("   📱 Loading Instagram...")
+    
+    # First visit Instagram homepage to get initial cookies
+    driver.get("https://www.instagram.com/")
+    human_delay(3, 5)
+    
+    # Now go to login page
+    print("   📱 Going to login page...")
+    driver.get(LOGIN_URL)
+    human_delay(4, 6)
+    
+    wait = WebDriverWait(driver, 30)
+    
+    # Handle cookie consent popup (EU)
+    try:
+        cookie_buttons = driver.find_elements(By.XPATH, 
+            "//button[contains(text(), 'Allow') or contains(text(), 'Accept') or contains(text(), 'Only allow essential') or contains(text(), 'Decline optional')]")
+        if cookie_buttons:
+            human_delay(1, 2)
+            cookie_buttons[0].click()
+            human_delay(2, 3)
+            print("   ✅ Handled cookie consent")
+    except:
+        pass
+    
+    # Random mouse movements to simulate human
+    try:
+        actions = ActionChains(driver)
+        for _ in range(3):
+            actions.move_by_offset(random.randint(-50, 50), random.randint(-50, 50))
+            actions.pause(random.uniform(0.1, 0.3))
+        actions.perform()
+        actions.reset_actions()
+    except:
+        pass
+    
+    # Find username field - Updated for Instagram's new 2025/2026 interface
+    print("   ⌨️ Entering username...")
+    username_field = None
+    
+    # New Instagram interface uses different selectors
+    selectors = [
+        (By.CSS_SELECTOR, "input[autocomplete='username']"),
+        (By.CSS_SELECTOR, "input[name='username']"),
+        (By.CSS_SELECTOR, "input[aria-label*='Phone number, username']"),
+        (By.CSS_SELECTOR, "input[aria-label*='phone']"),
+        (By.CSS_SELECTOR, "input[aria-label*='email']"),
+        (By.CSS_SELECTOR, "input[type='text']"),
+        (By.XPATH, "//input[@autocomplete='username']"),
+        (By.XPATH, "//input[contains(@aria-label, 'Phone')]"),
+        (By.XPATH, "//input[contains(@aria-label, 'username')]"),
+        (By.XPATH, "//form//input[@type='text']"),
+    ]
+    
+    # Wait for page to fully load
+    human_delay(2, 3)
+    
+    for by, selector in selectors:
+        try:
+            elements = driver.find_elements(by, selector)
+            for elem in elements:
+                if elem.is_displayed() and elem.is_enabled():
+                    username_field = elem
+                    print(f"   ✅ Found username field with: {selector}")
+                    break
+            if username_field:
+                break
+        except Exception as e:
+            continue
+    
+    # Last resort - find first visible text input
+    if not username_field:
+        try:
+            all_inputs = driver.find_elements(By.TAG_NAME, "input")
+            for inp in all_inputs:
+                if inp.is_displayed() and inp.get_attribute("type") in ["text", "email", "tel"]:
+                    username_field = inp
+                    print(f"   ✅ Found input field by tag")
+                    break
+        except:
+            pass
+    
+    if not username_field:
+        print("   ❌ Could not find username field")
+        # Take screenshot for debugging
+        try:
+            driver.save_screenshot("login_page_debug.png")
+            print("   📸 Screenshot saved to login_page_debug.png")
+        except:
+            pass
+        return False
+    
+    # Click and type username with human behavior
+    human_delay(0.5, 1)
+    username_field.click()
+    human_delay(0.3, 0.6)
+    username_field.clear()
+    human_typing(username_field, username)
+    human_delay(0.8, 1.5)
+    
+    # Find password field - Updated for new interface
+    print("   ⌨️ Entering password...")
+    password_field = None
+    
+    pwd_selectors = [
+        (By.CSS_SELECTOR, "input[autocomplete='current-password']"),
+        (By.CSS_SELECTOR, "input[name='password']"),
+        (By.CSS_SELECTOR, "input[type='password']"),
+        (By.XPATH, "//input[@type='password']"),
+        (By.XPATH, "//input[@autocomplete='current-password']"),
+    ]
+    
+    human_delay(0.5, 1)
+    
+    for by, selector in pwd_selectors:
+        try:
+            elements = driver.find_elements(by, selector)
+            for elem in elements:
+                if elem.is_displayed() and elem.is_enabled():
+                    password_field = elem
+                    print(f"   ✅ Found password field")
+                    break
+            if password_field:
+                break
+        except:
+            continue
+    
+    if not password_field:
+        print("   ❌ Could not find password field")
+        return False
+    
+    human_delay(0.5, 1)
+    password_field.click()
+    human_delay(0.3, 0.6)
+    password_field.clear()
+    human_typing(password_field, password)
+    human_delay(1, 2)
+    
+    # Click login button
+    print("   🔐 Clicking login button...")
+    try:
+        login_button = None
+        btn_selectors = [
+            (By.XPATH, "//button[@type='submit']"),
+            (By.CSS_SELECTOR, "button[type='submit']"),
+            (By.XPATH, "//button[contains(text(), 'Log in') or contains(text(), 'Log In')]"),
+        ]
+        
+        for by, selector in btn_selectors:
+            try:
+                login_button = driver.find_element(by, selector)
+                if login_button and login_button.is_enabled():
+                    break
+            except:
+                continue
+        
+        if login_button:
+            human_delay(0.5, 1)
+            login_button.click()
+        else:
+            password_field.send_keys(Keys.ENTER)
+    except Exception as e:
+        print(f"   ⚠️ Click failed, using Enter key: {e}")
+        password_field.send_keys(Keys.ENTER)
+    
+    print("   ⏳ Waiting for login to complete...")
+    print("   📺 If CAPTCHA appears, complete it manually in the browser window")
+    print("   ⏰ You have 3 minutes to complete any challenges...")
+    
+    # Wait for login
+    max_wait = 180
+    start_time = time.time()
+    
+    while time.time() - start_time < max_wait:
+        try:
+            current_url = driver.current_url
+            cookies = driver.get_cookies()
+            cookie_names = {c.get("name") for c in cookies}
+            
+            if "sessionid" in cookie_names and "csrftoken" in cookie_names:
+                print("   ✅ Session cookies detected!")
+                print("   ⏳ Waiting 10 seconds for all cookies to load...")
+                time.sleep(10)
+                # Navigate to home page to get more cookies
+                try:
+                    driver.get("https://www.instagram.com/")
+                    time.sleep(5)
+                except:
+                    pass
+                return True
+            
+            if "login" not in current_url.lower() and "challenge" not in current_url.lower() and "accounts" not in current_url.lower():
+                human_delay(2, 3)
+                cookies = driver.get_cookies()
+                cookie_names = {c.get("name") for c in cookies}
+                if "sessionid" in cookie_names:
+                    print("   ✅ Login successful!")
+                    print("   ⏳ Waiting 10 seconds for all cookies to load...")
+                    time.sleep(10)
+                    # Navigate to home page to get more cookies
+                    try:
+                        driver.get("https://www.instagram.com/")
+                        time.sleep(5)
+                    except:
+                        pass
+                    return True
+            
+            # Handle popups
+            try:
+                not_now = driver.find_elements(By.XPATH, 
+                    "//button[contains(text(), 'Not Now') or contains(text(), 'Not now')]")
+                if not_now:
+                    human_delay(0.5, 1)
+                    not_now[0].click()
+                    human_delay(1, 2)
+            except:
+                pass
+            
+            elapsed = int(time.time() - start_time)
+            if elapsed % 15 == 0:
+                print(f"   ⏳ Waiting... ({elapsed}s/{max_wait}s)")
+            
+            time.sleep(2)
+            
+        except Exception as e:
+            if "disconnected" in str(e).lower():
+                print(f"   ❌ Browser disconnected: {e}")
+                return False
+            time.sleep(2)
+    
+    print("   ❌ Login timed out")
+    return False
+
+
+def refresh_all_accounts() -> Dict[str, bool]:
+    """Refresh cookies for all configured accounts"""
+    try:
+        from multi_account_config import MULTI_ACCOUNT_CONFIG
+        accounts = MULTI_ACCOUNT_CONFIG.get("accounts", [])
+    except ImportError:
+        print("❌ Could not import multi_account_config")
+        return {}
+    
+    results = {}
+    for account in accounts:
+        username = account.get("username")
+        password = account.get("password")
+        if username and password:
+            print(f"\n{'='*50}")
+            success = auto_refresh_cookies(username, password, "Batch refresh")
+            results[username] = success
+            human_delay(5, 10)
+    
+    print(f"\n{'='*50}")
+    print("📊 Refresh Results:")
+    for username, success in results.items():
+        status = "✅" if success else "❌"
+        print(f"   {status} {username}")
+    
+    return results
+
+
+if __name__ == "__main__":
+    import sys
+    
+    if len(sys.argv) > 1:
+        username = sys.argv[1]
+        password = sys.argv[2] if len(sys.argv) > 2 else None
+        auto_refresh_cookies(username, password, "Manual refresh")
+    else:
+        refresh_all_accounts()

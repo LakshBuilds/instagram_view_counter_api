@@ -6,9 +6,11 @@ Defines account credentials and rate limiting settings
 # Account credentials - UPDATE WITH YOUR ACTUAL ACCOUNTS
 MULTI_ACCOUNT_CONFIG = {
     "accounts": [
+        # Active accounts used by API
         {"username": "candy_shopbuy", "password": "pass@@@123"},
-        {"username": "bhdemo2025", "password": "passpass"},
-        {"username": "elmasedoyle", "password": "yash1234"}
+        {"username": "raviram8274", "password": "sharks11"},
+        # Backup account
+        # {"username": "bhdemo2025", "password": "passpass"},
     ],
     "requests_per_cycle": 20,        # Requests per account per cycle
     "delay_between_requests": 15.0,  # Seconds between requests (4 req/min per account)
@@ -16,32 +18,26 @@ MULTI_ACCOUNT_CONFIG = {
 }
 
 # Proxy Configuration - Add your proxies here
-# Format: "http://user:pass@host:port" or "socks5://user:pass@host:port"
-PROXY_LIST = [
-    # Example proxies (uncomment and replace with your actual proxies):
-    # "http://user:pass@proxy1.example.com:8080",
-    # "http://user:pass@proxy2.example.com:8080",
-    # "socks5://user:pass@proxy3.example.com:1080",
-]
+PROXY_LIST = []
 
 # Configuration 1: Conservative (Safest)
 CONSERVATIVE_CONFIG = {
     "accounts": MULTI_ACCOUNT_CONFIG["accounts"],
-    "requests_per_cycle": 15,        # Reduced requests per cycle
-    "delay_between_requests": 20.0,  # Longer delays (3 req/min per account)
-    "global_wait_minutes": 6.0,      # Longer global wait
+    "requests_per_cycle": 15,
+    "delay_between_requests": 20.0,
+    "global_wait_minutes": 6.0,
 }
 
 # Configuration 2: Aggressive (Higher throughput, higher risk)
 AGGRESSIVE_CONFIG = {
     "accounts": MULTI_ACCOUNT_CONFIG["accounts"],
-    "requests_per_cycle": 25,        # More requests per cycle
-    "delay_between_requests": 12.0,  # Shorter delays (5 req/min per account)
-    "global_wait_minutes": 4.0,      # Shorter global wait
+    "requests_per_cycle": 25,
+    "delay_between_requests": 12.0,
+    "global_wait_minutes": 4.0,
 }
 
 # Configuration 3: Balanced (Recommended)
-BALANCED_CONFIG = MULTI_ACCOUNT_CONFIG  # Use the default config
+BALANCED_CONFIG = MULTI_ACCOUNT_CONFIG
 
 def validate_config(config):
     """Validate configuration parameters"""
@@ -57,14 +53,5 @@ def validate_config(config):
     for account in config["accounts"]:
         if "username" not in account or "password" not in account:
             raise ValueError("Each account must have username and password")
-    
-    if config["requests_per_cycle"] <= 0:
-        raise ValueError("requests_per_cycle must be positive")
-    
-    if config["delay_between_requests"] <= 0:
-        raise ValueError("delay_between_requests must be positive")
-    
-    if config["global_wait_minutes"] <= 0:
-        raise ValueError("global_wait_minutes must be positive")
     
     return True

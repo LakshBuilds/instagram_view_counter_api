@@ -67,13 +67,9 @@ def main():
     def url_generator():
         return urls
     
-    # Ask user for number of cycles
-    print("How many cycles do you want to run?")
-    print("  - Enter a number (e.g., 3 for 3 cycles)")
-    print("  - Press Enter for infinite cycles")
-    
-    cycles_input = input("\nNumber of cycles: ").strip()
-    max_cycles = int(cycles_input) if cycles_input else None
+    # Default to 3 cycles for automated runs
+    max_cycles = 3
+    print(f"\n🚀 Starting {max_cycles} cycles...")
     
     if max_cycles:
         print(f"\n🚀 Starting {max_cycles} cycles...")

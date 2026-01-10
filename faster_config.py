@@ -5,9 +5,14 @@ Reduces delay to 12 seconds for faster processing
 
 FASTER_CONFIG = {
     "accounts": [
-        {"username": "candy_shopbuy", "password": "pass@@@123"},
+        # Commented out non-working accounts
+        # {"username": "candy_shopbuy", "password": "pass@@@123"},
         {"username": "bhdemo2025", "password": "passpass"},
-        {"username": "elmasedoyle", "password": "yash1234"}
+        # {"username": "elmasedoyle", "password": "yash1234"},
+
+        # New working accounts (using 2 for now)
+        # {"username": "ravi108794", "password": "sharks10"},  # Commented out for now
+        {"username": "raviram8274", "password": "sharks11"}
     ],
     "requests_per_cycle": 20,
     "delay_between_requests": 12.0,  # 12 seconds (5 req/min per account)

@@ -7,6 +7,12 @@ import os
 from datetime import datetime, timedelta
 from cookie_auto_refresher import auto_refresh_cookies
 
+# Configurable rate limits via environment variables
+# With 2 accounts rotating, we can handle more requests per hour
+HOURLY_LIMIT = int(os.getenv('HOURLY_LIMIT', '500'))  # 500/hour with 2 accounts
+DAILY_LIMIT = int(os.getenv('DAILY_LIMIT', '5000'))   # 5000/day with 2 accounts
+REFRESH_THRESHOLD = int(os.getenv('REFRESH_THRESHOLD', '1000'))  # Disable auto-refresh (set high)
+
 class RequestTracker:
     def __init__(self, account_name="bhdemo2025"):
         self.account_name = account_name
@@ -74,10 +80,10 @@ class RequestTracker:
         current_hourly = self.stats['hourly_requests'].get(hour_key, 0)
         current_daily = self.stats['daily_requests'].get(day_key, 0)
         
-        print(f"📊 Request logged: {current_hourly}/50 this hour, {current_daily}/500 today")
+        print(f"📊 Request logged: {current_hourly}/{HOURLY_LIMIT} this hour, {current_daily}/{DAILY_LIMIT} today")
         
-        # Auto-refresh at 40 requests per hour
-        if current_hourly >= 40:
+        # Auto-refresh at threshold
+        if current_hourly >= REFRESH_THRESHOLD:
             print(f"🔄 AUTO-REFRESH TRIGGERED: {current_hourly} requests this hour")
             self.auto_refresh_cookies()
             return True
@@ -134,17 +140,20 @@ class RequestTracker:
                 print(f"❌ No password found for account {self.account_name}")
                 return False
             
-            # Set environment variables
+            # Enable auto cookie refresh
             os.environ['AUTO_COOKIE_REFRESH'] = '1'
             os.environ['INSTAGRAM_USERNAME'] = self.account_name
             os.environ['INSTAGRAM_PASSWORD'] = password
-            os.environ['SHOW_BROWSER'] = 'false'  # Headless for auto-refresh
+            os.environ['SHOW_BROWSER'] = 'true'  # Show browser for manual CAPTCHA if needed
+            os.environ['INSTAGRAM_COOKIES_FILE'] = f'cookies_{self.account_name}.txt'
             
             print(f"🔐 Refreshing cookies for {self.account_name}...")
+            print(f"   Browser will open - complete any CAPTCHA/security challenges if needed")
+            
             success = auto_refresh_cookies(f"Auto-refresh after rate limit")
             
             if success:
-                print(f"✅ Cookie refresh successful!")
+                print(f"✅ Cookie refresh successful for {self.account_name}!")
                 self.stats['last_refresh'] = datetime.now().isoformat()
                 
                 # Reset hourly counter after successful refresh
@@ -154,7 +163,7 @@ class RequestTracker:
                 
                 return True
             else:
-                print(f"❌ Cookie refresh failed!")
+                print(f"❌ Cookie refresh failed for {self.account_name}!")
                 return False
                 
         except Exception as e:
@@ -174,10 +183,10 @@ class RequestTracker:
             'total_requests': self.stats['total_requests'],
             'hourly_requests': current_hourly,
             'daily_requests': current_daily,
-            'hourly_remaining': max(0, 50 - current_hourly),
-            'daily_remaining': max(0, 500 - current_daily),
+            'hourly_remaining': max(0, HOURLY_LIMIT - current_hourly),
+            'daily_remaining': max(0, DAILY_LIMIT - current_daily),
             'last_refresh': self.stats['last_refresh'],
-            'needs_refresh_soon': current_hourly >= 35
+            'needs_refresh_soon': current_hourly >= (REFRESH_THRESHOLD - 20)
         }
     
     def print_status(self):
@@ -189,8 +198,8 @@ class RequestTracker:
         print("="*60)
         print(f"⏱️  Current Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"📈 Total Requests: {status['total_requests']}")
-        print(f"🕐 This Hour: {status['hourly_requests']}/50 ({status['hourly_remaining']} remaining)")
-        print(f"📅 Today: {status['daily_requests']}/500 ({status['daily_remaining']} remaining)")
+        print(f"🕐 This Hour: {status['hourly_requests']}/{HOURLY_LIMIT} ({status['hourly_remaining']} remaining)")
+        print(f"📅 Today: {status['daily_requests']}/{DAILY_LIMIT} ({status['daily_remaining']} remaining)")
         
         if status['last_refresh']:
             refresh_time = datetime.fromisoformat(status['last_refresh'])
@@ -199,11 +208,11 @@ class RequestTracker:
             print(f"🔄 Last Refresh: Never")
         
         if status['needs_refresh_soon']:
-            print(f"⚠️  WARNING: Approaching rate limit! Auto-refresh will trigger at 40 requests.")
+            print(f"⚠️  WARNING: Approaching rate limit! Auto-refresh will trigger at {REFRESH_THRESHOLD} requests.")
         
         # Progress bars
-        hourly_percent = (status['hourly_requests'] / 50) * 100
-        daily_percent = (status['daily_requests'] / 500) * 100
+        hourly_percent = (status['hourly_requests'] / HOURLY_LIMIT) * 100
+        daily_percent = (status['daily_requests'] / DAILY_LIMIT) * 100
         
         hourly_bar = "█" * int(hourly_percent / 5) + "░" * (20 - int(hourly_percent / 5))
         daily_bar = "█" * int(daily_percent / 5) + "░" * (20 - int(daily_percent / 5))
