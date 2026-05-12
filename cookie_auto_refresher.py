@@ -117,16 +117,56 @@ def _create_realistic_chrome_driver():
     if not show_browser:
         options.add_argument("--headless=new")
     
+    # Try multiple methods to create ChromeDriver
+    driver = None
+    error_messages = []
+    
+    # Method 1: Try webdriver-manager with cache clearing on failure
     try:
         from webdriver_manager.chrome import ChromeDriverManager
-        service = Service(ChromeDriverManager().install())
-    except:
-        service = None
+        try:
+            driver_path = ChromeDriverManager().install()
+            service = Service(driver_path)
+            driver = webdriver.Chrome(service=service, options=options)
+            print("   ✅ ChromeDriver initialized via webdriver-manager")
+        except Exception as e1:
+            error_messages.append(f"webdriver-manager: {str(e1)}")
+            # Try clearing cache and retrying
+            try:
+                import shutil
+                cache_dir = os.path.expanduser("~/.wdm")
+                if os.path.exists(cache_dir):
+                    print("   🔄 Clearing webdriver-manager cache...")
+                    shutil.rmtree(cache_dir, ignore_errors=True)
+                driver_path = ChromeDriverManager().install()
+                service = Service(driver_path)
+                driver = webdriver.Chrome(service=service, options=options)
+                print("   ✅ ChromeDriver initialized after cache clear")
+            except Exception as e2:
+                error_messages.append(f"webdriver-manager (retry): {str(e2)}")
+    except ImportError:
+        error_messages.append("webdriver-manager not available")
+    except Exception as e:
+        error_messages.append(f"webdriver-manager setup: {str(e)}")
     
-    if service:
-        driver = webdriver.Chrome(service=service, options=options)
-    else:
-        driver = webdriver.Chrome(options=options)
+    # Method 2: Try system chromedriver (if available)
+    if driver is None:
+        try:
+            driver = webdriver.Chrome(options=options)
+            print("   ✅ ChromeDriver initialized via system PATH")
+        except Exception as e:
+            error_messages.append(f"system chromedriver: {str(e)}")
+    
+    # If still None, raise error with all messages
+    if driver is None:
+        error_msg = "Failed to initialize ChromeDriver. Attempted methods:\n"
+        for i, msg in enumerate(error_messages, 1):
+            error_msg += f"   {i}. {msg}\n"
+        error_msg += "\nTroubleshooting:\n"
+        error_msg += "   1. Install ChromeDriver: brew install chromedriver\n"
+        error_msg += "   2. Or reinstall webdriver-manager: pip install --upgrade webdriver-manager\n"
+        error_msg += "   3. Clear cache: rm -rf ~/.wdm\n"
+        raise Exception(error_msg)
     
     # Execute stealth scripts to hide automation
     driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
@@ -178,21 +218,49 @@ def auto_refresh_cookies(
     reason: str = ""
 ) -> bool:
     """
-    Refresh Instagram cookies using Selenium with realistic browser profile.
+    Refresh Instagram cookies. Tries HTTP-only login first (no browser, ~3s);
+    falls back to Selenium when HTTP is unavailable or the failure mode might
+    still be salvageable in a browser. Set NO_HTTP_LOGIN=1 to skip HTTP path.
     """
-    
+
     username = username or os.getenv("INSTAGRAM_USERNAME") or os.getenv("INSTA_USERNAME")
     password = password or os.getenv("INSTAGRAM_PASSWORD") or os.getenv("INSTA_PASSWORD")
-    
+
     if not username or not password:
         print("❌ Missing credentials. Set INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD env vars.")
         return False
-    
+
     cookie_file = get_cookie_file_path(username)
-    
+
     print(f"\n🔄 Starting cookie refresh for: {username}")
     if reason:
         print(f"   Reason: {reason}")
+
+    # Fast path: HTTP-only login. Tiny memory footprint, ~3-5 seconds total.
+    # Failures that the browser can't fix either (checkpoint_required, 2FA,
+    # "wait a few minutes") are NOT retried via Selenium — that just makes
+    # the account flag stick harder.
+    if os.getenv("NO_HTTP_LOGIN", "0") not in ("1", "true", "yes"):
+        try:
+            from cookie_login_api import login_via_api, _write_cookie_file as _http_write
+            result = login_via_api(username, password)
+            if result.ok:
+                _http_write(result.cookies, cookie_file)
+                print(f"✅ Cookies refreshed via HTTP login for {username}")
+                return True
+            reason_low = (result.reason or "").lower()
+            unsalvageable = any(
+                k in reason_low
+                for k in ("checkpoint", "2fa", "two_factor", "wait a few minutes", "please wait")
+            )
+            if unsalvageable:
+                print(f"⏭️  HTTP login failed for {username}: {result.reason}")
+                print("   Skipping Selenium fallback — same failure expected.")
+                return False
+            print(f"⚠️  HTTP login failed for {username}: {result.reason}")
+            print("   Falling back to Selenium login …")
+        except Exception as e:
+            print(f"⚠️  HTTP login path errored ({e}); falling back to Selenium")
     
     driver = None
     try:
@@ -236,12 +304,12 @@ def _perform_login(driver, username: str, password: str) -> bool:
     
     # First visit Instagram homepage to get initial cookies
     driver.get("https://www.instagram.com/")
-    human_delay(3, 5)
+    time.sleep(1)  # Minimal wait for page load
     
     # Now go to login page
     print("   📱 Going to login page...")
     driver.get(LOGIN_URL)
-    human_delay(4, 6)
+    time.sleep(1)  # Minimal wait for page load
     
     wait = WebDriverWait(driver, 30)
     
@@ -250,21 +318,10 @@ def _perform_login(driver, username: str, password: str) -> bool:
         cookie_buttons = driver.find_elements(By.XPATH, 
             "//button[contains(text(), 'Allow') or contains(text(), 'Accept') or contains(text(), 'Only allow essential') or contains(text(), 'Decline optional')]")
         if cookie_buttons:
-            human_delay(1, 2)
+            time.sleep(0.5)
             cookie_buttons[0].click()
-            human_delay(2, 3)
+            time.sleep(0.5)
             print("   ✅ Handled cookie consent")
-    except:
-        pass
-    
-    # Random mouse movements to simulate human
-    try:
-        actions = ActionChains(driver)
-        for _ in range(3):
-            actions.move_by_offset(random.randint(-50, 50), random.randint(-50, 50))
-            actions.pause(random.uniform(0.1, 0.3))
-        actions.perform()
-        actions.reset_actions()
     except:
         pass
     
@@ -287,7 +344,7 @@ def _perform_login(driver, username: str, password: str) -> bool:
     ]
     
     # Wait for page to fully load
-    human_delay(2, 3)
+    time.sleep(0.5)  # Minimal wait for elements to render
     
     for by, selector in selectors:
         try:
@@ -324,13 +381,12 @@ def _perform_login(driver, username: str, password: str) -> bool:
             pass
         return False
     
-    # Click and type username with human behavior
-    human_delay(0.5, 1)
+    # Click and type username
     username_field.click()
-    human_delay(0.3, 0.6)
+    time.sleep(0.2)
     username_field.clear()
-    human_typing(username_field, username)
-    human_delay(0.8, 1.5)
+    username_field.send_keys(username)  # Fast typing - no delay needed
+    time.sleep(0.3)
     
     # Find password field - Updated for new interface
     print("   ⌨️ Entering password...")
@@ -344,7 +400,7 @@ def _perform_login(driver, username: str, password: str) -> bool:
         (By.XPATH, "//input[@autocomplete='current-password']"),
     ]
     
-    human_delay(0.5, 1)
+    time.sleep(0.3)
     
     for by, selector in pwd_selectors:
         try:
@@ -363,12 +419,11 @@ def _perform_login(driver, username: str, password: str) -> bool:
         print("   ❌ Could not find password field")
         return False
     
-    human_delay(0.5, 1)
     password_field.click()
-    human_delay(0.3, 0.6)
+    time.sleep(0.2)
     password_field.clear()
-    human_typing(password_field, password)
-    human_delay(1, 2)
+    password_field.send_keys(password)  # Fast typing - no delay needed
+    time.sleep(0.3)
     
     # Click login button
     print("   🔐 Clicking login button...")
@@ -389,7 +444,7 @@ def _perform_login(driver, username: str, password: str) -> bool:
                 continue
         
         if login_button:
-            human_delay(0.5, 1)
+            time.sleep(0.2)
             login_button.click()
         else:
             password_field.send_keys(Keys.ENTER)
@@ -404,63 +459,79 @@ def _perform_login(driver, username: str, password: str) -> bool:
     # Wait for login
     max_wait = 180
     start_time = time.time()
+    last_progress_time = 0
+    check_count = 0
     
     while time.time() - start_time < max_wait:
         try:
+            check_count += 1
+            elapsed = int(time.time() - start_time)
             current_url = driver.current_url
+            
+            # More frequent progress updates (every 5 seconds)
+            if elapsed - last_progress_time >= 5:
+                print(f"   ⏳ Checking login status... ({elapsed}s/{max_wait}s) - URL: {current_url[:50]}...")
+                last_progress_time = elapsed
+            
             cookies = driver.get_cookies()
             cookie_names = {c.get("name") for c in cookies}
             
+            # Check for session cookies
             if "sessionid" in cookie_names and "csrftoken" in cookie_names:
                 print("   ✅ Session cookies detected!")
-                print("   ⏳ Waiting 10 seconds for all cookies to load...")
-                time.sleep(10)
+                print("   ⏳ Collecting all cookies...")
+                time.sleep(2)  # Minimal wait for cookies to stabilize
                 # Navigate to home page to get more cookies
                 try:
                     driver.get("https://www.instagram.com/")
-                    time.sleep(5)
+                    time.sleep(1)  # Minimal wait
                 except:
                     pass
                 return True
             
+            # Check if we're logged in (not on login/challenge page)
             if "login" not in current_url.lower() and "challenge" not in current_url.lower() and "accounts" not in current_url.lower():
-                human_delay(2, 3)
                 cookies = driver.get_cookies()
                 cookie_names = {c.get("name") for c in cookies}
                 if "sessionid" in cookie_names:
                     print("   ✅ Login successful!")
-                    print("   ⏳ Waiting 10 seconds for all cookies to load...")
-                    time.sleep(10)
+                    print("   ⏳ Collecting all cookies...")
+                    time.sleep(2)  # Minimal wait for cookies to stabilize
                     # Navigate to home page to get more cookies
                     try:
                         driver.get("https://www.instagram.com/")
-                        time.sleep(5)
+                        time.sleep(1)  # Minimal wait
                     except:
                         pass
                     return True
             
-            # Handle popups
+            # Handle popups (Save Login Info, Notifications, etc.)
             try:
                 not_now = driver.find_elements(By.XPATH, 
                     "//button[contains(text(), 'Not Now') or contains(text(), 'Not now')]")
                 if not_now:
-                    human_delay(0.5, 1)
+                    print("   🔔 Handling popup...")
+                    time.sleep(0.3)
                     not_now[0].click()
-                    human_delay(1, 2)
+                    time.sleep(0.5)
             except:
                 pass
             
-            elapsed = int(time.time() - start_time)
-            if elapsed % 15 == 0:
-                print(f"   ⏳ Waiting... ({elapsed}s/{max_wait}s)")
+            # Check for CAPTCHA or challenge pages
+            if "challenge" in current_url.lower():
+                if elapsed % 10 == 0:  # Every 10 seconds when on challenge page
+                    print(f"   🔐 Challenge page detected - complete CAPTCHA if needed ({elapsed}s)")
             
-            time.sleep(2)
+            time.sleep(1)  # Check every second
             
         except Exception as e:
             if "disconnected" in str(e).lower():
                 print(f"   ❌ Browser disconnected: {e}")
                 return False
-            time.sleep(2)
+            elapsed = int(time.time() - start_time)
+            if elapsed % 10 == 0:
+                print(f"   ⚠️  Error checking status: {e} ({elapsed}s)")
+            time.sleep(1)
     
     print("   ❌ Login timed out")
     return False
@@ -474,16 +545,26 @@ def refresh_all_accounts() -> Dict[str, bool]:
     except ImportError:
         print("❌ Could not import multi_account_config")
         return {}
-    
+
+    # Honor DISABLED_ACCOUNTS so we don't keep hammering Instagram's login endpoint
+    # for an account that's already been flagged for "automated behavior" — repeated
+    # Selenium logins make the flag stick harder.
+    disabled = {a.strip() for a in os.getenv('DISABLED_ACCOUNTS', '').split(',') if a.strip()}
+    if disabled:
+        print(f"⚠️  Skipping disabled accounts: {sorted(disabled)}")
+
     results = {}
     for account in accounts:
         username = account.get("username")
         password = account.get("password")
+        if username in disabled:
+            print(f"   ⏭️  Skipping {username} (disabled via env)")
+            continue
         if username and password:
             print(f"\n{'='*50}")
             success = auto_refresh_cookies(username, password, "Batch refresh")
             results[username] = success
-            human_delay(5, 10)
+            time.sleep(1)  # Minimal wait between accounts
     
     print(f"\n{'='*50}")
     print("📊 Refresh Results:")

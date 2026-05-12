@@ -9,7 +9,8 @@ from datetime import datetime
 
 class ScraperDashboard:
     def __init__(self):
-        self.api_url = "http://127.0.0.1:8000"
+        _port = int(os.getenv("API_PORT", "8002"))
+        self.api_url = f"http://127.0.0.1:{_port}"
         self.tunnel_url = "https://shaft-fashion-survivors-med.trycloudflare.com"
         
     def get_stats(self):

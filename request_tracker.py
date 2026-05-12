@@ -8,10 +8,10 @@ from datetime import datetime, timedelta
 from cookie_auto_refresher import auto_refresh_cookies
 
 # Configurable rate limits via environment variables
-# With 2 accounts rotating, we can handle more requests per hour
-HOURLY_LIMIT = int(os.getenv('HOURLY_LIMIT', '500'))  # 500/hour with 2 accounts
-DAILY_LIMIT = int(os.getenv('DAILY_LIMIT', '5000'))   # 5000/day with 2 accounts
-REFRESH_THRESHOLD = int(os.getenv('REFRESH_THRESHOLD', '1000'))  # Disable auto-refresh (set high)
+# DISABLED LIMITS - No restrictions!
+HOURLY_LIMIT = int(os.getenv('HOURLY_LIMIT', '999999999'))  # Effectively unlimited
+DAILY_LIMIT = int(os.getenv('DAILY_LIMIT', '999999999'))     # Effectively unlimited
+REFRESH_THRESHOLD = int(os.getenv('REFRESH_THRESHOLD', '999999999'))  # Effectively disabled
 
 class RequestTracker:
     def __init__(self, account_name="bhdemo2025"):
@@ -29,8 +29,12 @@ class RequestTracker:
             else:
                 self.stats = {
                     'total_requests': 0,
+                    'successful_requests': 0,
+                    'failed_requests': 0,
                     'hourly_requests': {},
                     'daily_requests': {},
+                    'recent_errors': [],  # Track last 50 errors
+                    'error_rate_5min': 0.0,  # Error rate in last 5 minutes
                     'last_refresh': None,
                     'account': self.account_name
                 }
@@ -60,15 +64,40 @@ class RequestTracker:
         """Get current day key for tracking"""
         return str(datetime.now().date())
     
-    def log_request(self, success=True):
+    def log_request(self, success=True, error_msg=None):
         """Log a request and check if refresh is needed"""
         hour_key = self.get_current_hour_key()
         day_key = self.get_current_day_key()
+        
+        # Initialize error tracking if not present
+        if 'successful_requests' not in self.stats:
+            self.stats['successful_requests'] = 0
+        if 'failed_requests' not in self.stats:
+            self.stats['failed_requests'] = 0
+        if 'recent_errors' not in self.stats:
+            self.stats['recent_errors'] = []
         
         # Update counters
         self.stats['total_requests'] += 1
         self.stats['hourly_requests'][hour_key] = self.stats['hourly_requests'].get(hour_key, 0) + 1
         self.stats['daily_requests'][day_key] = self.stats['daily_requests'].get(day_key, 0) + 1
+        
+        if success:
+            self.stats['successful_requests'] += 1
+        else:
+            self.stats['failed_requests'] += 1
+            # Track recent errors (keep last 50)
+            if error_msg:
+                error_entry = {
+                    'timestamp': datetime.now().isoformat(),
+                    'error': error_msg[:200]  # Truncate long errors
+                }
+                self.stats['recent_errors'].append(error_entry)
+                if len(self.stats['recent_errors']) > 50:
+                    self.stats['recent_errors'].pop(0)
+        
+        # Calculate error rate for last 5 minutes
+        self._calculate_error_rate()
         
         # Clean old data (keep only last 24 hours and 7 days)
         self.cleanup_old_data()
@@ -89,6 +118,52 @@ class RequestTracker:
             return True
             
         return False
+    
+    def _calculate_error_rate(self):
+        """Calculate error rate for last 5 minutes using actual request counts"""
+        now = datetime.now()
+        cutoff = now - timedelta(minutes=5)
+        
+        recent_error_count = 0
+        for error in self.stats.get('recent_errors', []):
+            try:
+                error_time = datetime.fromisoformat(error['timestamp'])
+                if error_time >= cutoff:
+                    recent_error_count += 1
+            except:
+                pass
+        
+        total_success = self.stats.get('successful_requests', 0)
+        total_fail = self.stats.get('failed_requests', 0)
+        total_all = total_success + total_fail
+        
+        # Use actual totals: if there are recent errors, calculate against
+        # a reasonable denominator (at least 1 to avoid division by zero)
+        hour_key = self.get_current_hour_key()
+        hourly_requests = self.stats['hourly_requests'].get(hour_key, 0)
+        recent_total_estimate = max(hourly_requests // 12, 1)
+        recent_total_count = max(recent_error_count, recent_total_estimate)
+        
+        if recent_total_count > 0:
+            self.stats['error_rate_5min'] = (recent_error_count / recent_total_count) * 100
+        else:
+            self.stats['error_rate_5min'] = 0.0
+        
+        # Also track overall error rate for visibility
+        if total_all > 0:
+            self.stats['overall_error_rate'] = (total_fail / total_all) * 100
+        else:
+            self.stats['overall_error_rate'] = 0.0
+    
+    def get_error_stats(self):
+        """Get error statistics"""
+        return {
+            'error_rate_5min': self.stats.get('error_rate_5min', 0.0),
+            'total_errors': self.stats.get('failed_requests', 0),
+            'total_success': self.stats.get('successful_requests', 0),
+            'recent_errors': self.stats.get('recent_errors', [])[-10:],  # Last 10 errors
+            'is_error_spike': self.stats.get('error_rate_5min', 0.0) > 30.0  # More than 30% errors (lowered threshold)
+        }
     
     def cleanup_old_data(self):
         """Remove old data to keep file size manageable"""
@@ -128,11 +203,11 @@ class RequestTracker:
         try:
             # Get account credentials
             accounts = {
-                'bhdemo2025': 'passpass',
+                'bhdemo2025': 'pass@@',
                 'candy_shopbuy': 'pass@@@123',
                 'elmasedoyle': 'yash1234',
                 'ravi108794': 'sharks10',
-                'raviram8274': 'sharks11'
+                'hatke_automation': 'pass@@@123P',
             }
             
             password = accounts.get(self.account_name)
@@ -186,7 +261,8 @@ class RequestTracker:
             'hourly_remaining': max(0, HOURLY_LIMIT - current_hourly),
             'daily_remaining': max(0, DAILY_LIMIT - current_daily),
             'last_refresh': self.stats['last_refresh'],
-            'needs_refresh_soon': current_hourly >= (REFRESH_THRESHOLD - 20)
+            'needs_refresh_soon': current_hourly >= (REFRESH_THRESHOLD - 20),
+            'error_stats': self.get_error_stats()
         }
     
     def print_status(self):
@@ -224,13 +300,17 @@ class RequestTracker:
 # Global tracker instance
 tracker = RequestTracker("bhdemo2025")
 
-def log_api_request(success=True):
+def log_api_request(success=True, error_msg=None):
     """Function to call from API to log requests"""
-    return tracker.log_request(success)
+    return tracker.log_request(success, error_msg)
 
 def get_request_status():
     """Get current request status"""
     return tracker.get_status()
+
+def get_error_stats():
+    """Get error statistics"""
+    return tracker.get_error_stats()
 
 def print_request_status():
     """Print current status"""

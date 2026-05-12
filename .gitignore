@@ -39,9 +39,23 @@ cookies_*.txt
 # Log files
 *.log
 
-# IDE
+# Ephemeral runtime state — regenerated on every launcher start
+tunnel_url.txt
+tunnel_output.log
+
+# Trickle cache + tracked-reel state (per-deployment operational data)
+reel_cache.json
+tracked_reels.json
+
+# Debug screenshots / generated assets
+*.png
+*.jpg
+*.jpeg
+
+# IDE / tooling
 .vscode/
 .idea/
+.kiro/
 *.swp
 *.swo
 *~

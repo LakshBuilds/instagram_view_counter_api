@@ -6,11 +6,8 @@ Defines account credentials and rate limiting settings
 # Account credentials - UPDATE WITH YOUR ACTUAL ACCOUNTS
 MULTI_ACCOUNT_CONFIG = {
     "accounts": [
-        # Active accounts used by API
-        {"username": "candy_shopbuy", "password": "pass@@@123"},
-        {"username": "raviram8274", "password": "sharks11"},
-        # Backup account
-        # {"username": "bhdemo2025", "password": "passpass"},
+        {"username": "bhdemo2025", "password": "pass@@"},
+        {"username": "hatke_automation", "password": "pass@@@123P"},
     ],
     "requests_per_cycle": 20,        # Requests per account per cycle
     "delay_between_requests": 15.0,  # Seconds between requests (4 req/min per account)
