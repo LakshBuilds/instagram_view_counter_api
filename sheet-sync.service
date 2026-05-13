@@ -1,0 +1,20 @@
+[Unit]
+Description=Daily sync: Payment Confirmation Google Sheet → Supabase reels table
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/instagram_view_counter_api
+Environment="PATH=/home/ubuntu/instagram_view_counter_api/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="GOOGLE_SHEETS_SERVICE_ACCOUNT_JSON=/home/ubuntu/google_service_account.json"
+# Supabase auth — these are loaded from /home/ubuntu/sheet-sync.env (mode 600)
+# Holds VITE_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
+EnvironmentFile=-/home/ubuntu/sheet-sync.env
+ExecStart=/home/ubuntu/instagram_view_counter_api/venv/bin/python /home/ubuntu/instagram_view_counter_api/sync_sheet_to_supabase.py --apply --days 30
+StandardOutput=append:/home/ubuntu/instagram_view_counter_api/sheet-sync.log
+StandardError=append:/home/ubuntu/instagram_view_counter_api/sheet-sync.log
+
+[Install]
+WantedBy=multi-user.target

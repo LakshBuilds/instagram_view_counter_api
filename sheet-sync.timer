@@ -1,0 +1,14 @@
+[Unit]
+Description=Run sheet-sync daily at 8:30 IST (03:00 UTC)
+Requires=sheet-sync.service
+
+[Timer]
+# Runs every day at 03:00 UTC = 08:30 IST. Adjust by editing OnCalendar.
+OnCalendar=*-*-* 03:00:00 UTC
+# If the VM was off when the schedule fired, run it as soon as we boot.
+Persistent=true
+RandomizedDelaySec=300
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
